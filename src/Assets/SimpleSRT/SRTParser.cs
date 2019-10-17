@@ -4,7 +4,15 @@ using UnityEngine;
 
 public class SRTParser
 {
+  enum eReadState
+  {
+    Index,
+    Time,
+    Text
+  }
+    // 解析后的字幕
   List<SubtitleBlock> _subtitles;
+
   public SRTParser(string textAssetResourcePath)
   {
     var text = Resources.Load<TextAsset>(textAssetResourcePath);
@@ -16,6 +24,7 @@ public class SRTParser
     this._subtitles = Load(textAsset);
   }
 
+    // 加载srt文件
   static public List<SubtitleBlock> Load(TextAsset textAsset)
   {
     if (textAsset == null)
@@ -24,8 +33,11 @@ public class SRTParser
       return null;
     }
 
+    // 分成行
     var lines = textAsset.text.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
 
+    // 当前读取状态
+    // 要读取Index
     var currentState = eReadState.Index;
 
     var subs = new List<SubtitleBlock>();
@@ -33,6 +45,8 @@ public class SRTParser
     int currentIndex = 0;
     double currentFrom = 0, currentTo = 0;
     var currentText = string.Empty;
+
+    // 遍历行
     for (var l = 0; l < lines.Length; l++)
     {
       var line = lines[l];
@@ -45,13 +59,21 @@ public class SRTParser
             if (Int32.TryParse(line, out index))
             {
               currentIndex = index;
+
+              // 当前读取状态
+              // 需要读取时间
               currentState = eReadState.Time;
             }
           }
           break;
+
         case eReadState.Time:
           {
             line = line.Replace(',', '.');
+
+            // 分开，
+            // 开始时间
+            // 结束时间
             var parts = line.Split(new[] { "-->" }, StringSplitOptions.RemoveEmptyEntries);
 
             // Parse the timestamps
@@ -63,21 +85,30 @@ public class SRTParser
                 TimeSpan toTime;
                 if (TimeSpan.TryParse(parts[1], out toTime))
                 {
+                    // 时间，保存成单位s
                   currentFrom = fromTime.TotalSeconds;
                   currentTo = toTime.TotalSeconds;
+
+                  // 当前读取状态
+                  // 字幕文本
                   currentState = eReadState.Text;
                 }
               }
             }
           }
           break;
+
         case eReadState.Text:
           {
+            // 需要空行
+            // 标记文本结束
 			if (currentText != string.Empty)
 				currentText += "\r\n";
 
             currentText += line;
 
+            // 读取结束
+            // 创建SubtitleBlock
             // When we hit an empty line, consider it the end of the text
             if (string.IsNullOrEmpty(line) || l == lines.Length - 1)
             {
@@ -86,6 +117,9 @@ public class SRTParser
 
               // Reset stuff so we can start again for the next block
               currentText = string.Empty;
+
+              // 当前读取状态
+              // index
               currentState = eReadState.Index;
             }
           }
@@ -99,8 +133,11 @@ public class SRTParser
   {
     if (_subtitles.Count > 0)
     {
+        // subtitle: 指向第一个字幕
       var subtitle = _subtitles[0];
 
+        // 如果时间已经超过了此字幕
+        // 移除
       if (time >= subtitle.To)
       {
         _subtitles.RemoveAt(0);
@@ -108,9 +145,12 @@ public class SRTParser
         if (_subtitles.Count == 0)
           return null;
 
+        // 更新subtitle
+        // 仍指向第一个字幕
         subtitle = _subtitles[0];
       }
 
+        // Q: ?
       if (subtitle.From > time)
         return SubtitleBlock.Blank;
 
@@ -118,15 +158,9 @@ public class SRTParser
     }
     return null;
   }
-
-  enum eReadState
-  {
-    Index,
-    Time,
-    Text
-  }
 }
 
+// 字幕的一段
 public class SubtitleBlock
 {
   static SubtitleBlock _blank;
@@ -134,6 +168,7 @@ public class SubtitleBlock
   {
     get { return _blank ?? (_blank = new SubtitleBlock(0, 0, 0, string.Empty)); }
   }
+
   public int Index { get; private set; }
   public double Length { get; private set; }
   public double From { get; private set; }
